@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,6 +18,7 @@ var DB *sqlx.DB
 const ACTION_CREATE = "+"
 const ACTION_DO_ID = "!"
 const ACTION_UNDO_ID = "?"
+const ACTION_CLEAR_ALL = "|"
 
 func main() {
 	CheckDbAndConnect()
@@ -33,14 +35,14 @@ func main() {
 		}
 
 		if err != nil {
-			errorNotify(err)
+			ErrorNotify(err)
 		}
 	}
 
 	todos, err := GetTodos()
 
 	if err != nil {
-		errorNotify(err)
+		ErrorNotify(err)
 		os.Exit(1)
 	}
 
@@ -72,6 +74,8 @@ func ManageSelection(selection string) error {
 		}
 
 		return MarkTodoNotDone(intActionValue)
+	case "|":
+		return ClearAll();
 	default:
 		return MarkTodoDoneFromSelection(selection)
 	}
@@ -85,7 +89,13 @@ func CheckDbAndConnect() error {
 		return err
 	}
 
-	_, err = DB.Exec("CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY, title TEXT NOT NULL UNIQUE, done BOOLEAN default false, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, finished_at TIMESTAMP)")
+	_, err = DB.Exec("CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL UNIQUE, done BOOLEAN default false, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, finished_at TIMESTAMP)")
+
+	if err != nil {
+		return err
+	}
+
+	_, err = DB.Exec("CREATE TABLE IF NOT EXISTS todos_eliminados (deleted_at TIMESTAMP not null, id INTEGER PRIMARY KEY, title TEXT NOT NULL, done BOOLEAN default false, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, finished_at TIMESTAMP)")
 	return err
 }
 
@@ -141,6 +151,29 @@ func MarkTodoNotDone(id int) error {
 	return err
 }
 
+func ClearAll() error {
+	tx, err := DB.BeginTx(context.Background(), nil)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("INSERT INTO todos_eliminados SELECT CURRENT_TIMESTAMP, * FROM todos")
+
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM todos")
+
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
+	return err
+}
+
 func (t *Todo) Description() string {
 	doneText := "✘"
 	if t.Done {
@@ -150,7 +183,7 @@ func (t *Todo) Description() string {
 	return fmt.Sprintf("[%v] %v %v %v", t.ID, t.CreatedAt.Format("2006-01-02 15:04"), t.Title, doneText)
 }
 
-func errorNotify(err error) {
+func ErrorNotify(err error) {
 	cmd := exec.Command("notify-send", "-a", "rofi-todo", "Error", err.Error())
 	cmd.Run()
 }
