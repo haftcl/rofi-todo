@@ -21,12 +21,20 @@ const ACTION_DO_ID = "!"
 const ACTION_UNDO_ID = "?"
 const ACTION_CLEAR = "-"
 const ACTION_EDIT = ">"
+const DATA_FOLDER = `~/.config/rofi-todo`
 
 func main() {
-	CheckDbAndConnect()
+	var err error
+
+	err = CheckDbAndConnect()
+
+	if err != nil {
+		ErrorNotify(err)
+		os.Exit(1)
+	}
+
 	defer DB.Close()
 	args := os.Args
-	var err error
 	var selection string
 
 	if len(args) == 2 {
@@ -105,7 +113,21 @@ func ManageSelection(selection string) error {
 
 func CheckDbAndConnect() error {
 	var err error
-	DB, err = sqlx.Connect("sqlite3", "./rofi-todo.db")
+
+	dataFolder := DATA_FOLDER
+
+	envFolder, _ := os.LookupEnv("GODO_DATA_FOLDER")
+
+	if len(envFolder) > 0 {
+		dataFolder = envFolder
+	}
+
+	if _, err := os.Stat(dataFolder); os.IsNotExist(err) {
+		os.MkdirAll(dataFolder, 0755)
+	}
+
+	file := fmt.Sprintf("%s%s", dataFolder, "/rofi-todo.db")
+	DB, err = sqlx.Connect("sqlite3", file)
 
 	if err != nil {
 		return err
