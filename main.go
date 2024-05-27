@@ -19,7 +19,7 @@ var DB *sqlx.DB
 const ACTION_CREATE = "+"
 const ACTION_DO_ID = "!"
 const ACTION_UNDO_ID = "?"
-const ACTION_CLEAR = "|"
+const ACTION_CLEAR = "-"
 const ACTION_EDIT = ">"
 
 func main() {
