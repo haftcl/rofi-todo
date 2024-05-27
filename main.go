@@ -21,7 +21,7 @@ const ACTION_DO_ID = "!"
 const ACTION_UNDO_ID = "?"
 const ACTION_CLEAR = "-"
 const ACTION_EDIT = ">"
-const DATA_FOLDER = `~/.config/rofi-todo`
+const DATA_FOLDER = `/.config/rofi-todo`
 
 func main() {
 	var err error
@@ -113,17 +113,32 @@ func ManageSelection(selection string) error {
 
 func CheckDbAndConnect() error {
 	var err error
+	var dataFolder string
 
-	dataFolder := DATA_FOLDER
-
-	envFolder, _ := os.LookupEnv("GODO_DATA_FOLDER")
+	envFolder := os.Getenv("GODO_DATA_FOLDER")
 
 	if len(envFolder) > 0 {
 		dataFolder = envFolder
+	} else {
+		homeFolder, err := os.UserHomeDir()
+
+		if err != nil {
+			return err
+		}
+
+		dataFolder = homeFolder + DATA_FOLDER
 	}
 
-	if _, err := os.Stat(dataFolder); os.IsNotExist(err) {
-		os.MkdirAll(dataFolder, 0755)
+	if _, err = os.Stat(dataFolder); err != nil {
+		if os.IsNotExist(err) {
+			err = os.MkdirAll(dataFolder, 0755)
+
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 
 	file := fmt.Sprintf("%s%s", dataFolder, "/rofi-todo.db")
