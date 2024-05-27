@@ -77,17 +77,25 @@ func ManageSelection(selection string) error {
 
 		return MarkTodoNotDone(intActionValue)
 	case ACTION_CLEAR:
-		if len(actionValue) > 0 {
-			intActionValue, err := strconv.Atoi(actionValue)
-
-			if err != nil {
-				return err
-			}
-
-			return ClearTodo(intActionValue)
+		if len(actionValue) == 0 {
+			return fmt.Errorf("Need to specify an action value for clear action")
 		}
 
-		return ClearAll()
+		if actionValue == "done" {
+			return ClearAllDone()
+		}
+
+		if actionValue == "all" {
+			return ClearAll()
+		}
+
+		intActionValue, err := strconv.Atoi(actionValue)
+
+		if err != nil {
+			return err
+		}
+
+		return ClearTodo(intActionValue)
 	case ACTION_EDIT:
 		return EditTodo(actionValue)
 	default:
@@ -202,6 +210,29 @@ func ClearTodo(id int) error {
 	}
 
 	_, err = tx.Exec("DELETE FROM todos where id = ?", id)
+
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
+	return err
+}
+
+func ClearAllDone() error {
+	tx, err := DB.BeginTx(context.Background(), nil)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("INSERT INTO todos_eliminados SELECT CURRENT_TIMESTAMP, * FROM todos where done = true")
+
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM todos where done = true")
 
 	if err != nil {
 		return err
