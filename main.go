@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -18,7 +19,8 @@ var DB *sqlx.DB
 const ACTION_CREATE = "+"
 const ACTION_DO_ID = "!"
 const ACTION_UNDO_ID = "?"
-const ACTION_CLEAR_ALL = "|"
+const ACTION_CLEAR = "|"
+const ACTION_EDIT = ">"
 
 func main() {
 	CheckDbAndConnect()
@@ -53,12 +55,12 @@ func main() {
 
 func ManageSelection(selection string) error {
 	action := selection[:1]
-	actionValue := selection[1:]
+	actionValue := strings.TrimSpace(selection[1:])
 
 	switch action {
-	case "+":
+	case ACTION_CREATE:
 		return CreateTodo(actionValue)
-	case "!":
+	case ACTION_DO_ID:
 		intActionValue, err := strconv.Atoi(actionValue)
 
 		if err != nil {
@@ -66,7 +68,7 @@ func ManageSelection(selection string) error {
 		}
 
 		return MarkTodoDone(intActionValue)
-	case "?":
+	case ACTION_UNDO_ID:
 		intActionValue, err := strconv.Atoi(actionValue)
 
 		if err != nil {
@@ -74,8 +76,20 @@ func ManageSelection(selection string) error {
 		}
 
 		return MarkTodoNotDone(intActionValue)
-	case "|":
-		return ClearAll();
+	case ACTION_CLEAR:
+		if len(actionValue) > 0 {
+			intActionValue, err := strconv.Atoi(actionValue)
+
+			if err != nil {
+				return err
+			}
+
+			return ClearTodo(intActionValue)
+		}
+
+		return ClearAll()
+	case ACTION_EDIT:
+		return EditTodo(actionValue)
 	default:
 		return MarkTodoDoneFromSelection(selection)
 	}
@@ -148,6 +162,52 @@ func MarkTodoDone(id int) error {
 
 func MarkTodoNotDone(id int) error {
 	_, err := DB.Exec("UPDATE todos SET done = ?, finished_at = NULL WHERE id = ? and DONE = true", false, id)
+	return err
+}
+
+func EditTodo(selection string) error {
+	values := strings.SplitN(selection, " ", 2)
+
+	if len(values) < 2 {
+		return fmt.Errorf("No id found in selection")
+	}
+
+	id, err := strconv.Atoi(values[0])
+
+	if err != nil {
+		return err
+	}
+
+	val := strings.TrimSpace(values[1])
+
+	if len(val) == 0 {
+		return fmt.Errorf("No value found in selection")
+	}
+
+	_, err = DB.Exec("UPDATE todos SET title = ? WHERE id = ?", val, id)
+	return err
+}
+
+func ClearTodo(id int) error {
+	tx, err := DB.BeginTx(context.Background(), nil)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("INSERT INTO todos_eliminados SELECT CURRENT_TIMESTAMP, * FROM todos where id = ?", id)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM todos where id = ?", id)
+
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
 	return err
 }
 
