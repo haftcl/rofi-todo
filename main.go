@@ -123,7 +123,7 @@ type Todo struct {
 
 func GetTodos() ([]Todo, error) {
 	todos := []Todo{}
-	err := DB.Select(&todos, "SELECT * FROM todos ORDER BY done asc, created_at DESC")
+	err := DB.Select(&todos, "SELECT * FROM todos ORDER BY done ASC, created_at ASC")
 
 	if err != nil {
 		return nil, err
