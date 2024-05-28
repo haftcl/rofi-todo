@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -21,7 +22,16 @@ const ACTION_DO_ID = "!"
 const ACTION_UNDO_ID = "?"
 const ACTION_CLEAR = "-"
 const ACTION_EDIT = ">"
+const ACTION_SELECTION = "SELECTION"
 const DATA_FOLDER = `/.config/rofi-todo`
+
+var actions = []string{
+	ACTION_CREATE,
+	ACTION_DO_ID,
+	ACTION_UNDO_ID,
+	ACTION_CLEAR,
+	ACTION_EDIT,
+}
 
 func main() {
 	var err error
@@ -34,16 +44,15 @@ func main() {
 	}
 
 	defer DB.Close()
-	args := os.Args
-	var selection string
 
-	if len(args) == 2 {
-		selection = args[1]
+	command, err := CommandFromCmdArgs(os.Args)
 
-		if len(selection) > 0 {
-			err = ManageSelection(selection)
-		}
+	if err != nil {
+		ErrorNotify(err)
+	}
 
+	if command != nil {
+		err = command.Run()
 		if err != nil {
 			ErrorNotify(err)
 		}
@@ -61,15 +70,53 @@ func main() {
 	}
 }
 
-func ManageSelection(selection string) error {
-	action := selection[:1]
-	actionValue := strings.TrimSpace(selection[1:])
+type TodoCommand struct {
+	Action string
+	Value  string
+}
 
-	switch action {
+func CommandFromCmdArgs(args []string) (*TodoCommand, error) {
+	if len(args) != 2 {
+		return nil, nil
+	}
+
+	selection := args[1]
+
+	if len(selection) == 0 {
+		return nil, nil
+	}
+
+	action := selection[:1]
+
+	if len(action) == 0 {
+		return nil, fmt.Errorf("No action found")
+	}
+
+	t := &TodoCommand{}
+
+	if slices.Contains(actions, action) {
+		actionValue := strings.TrimSpace(selection[1:])
+
+		if len(actionValue) == 0 {
+			return nil, fmt.Errorf("No action value found")
+		}
+
+		t.Action = action
+		t.Value = actionValue
+	} else {
+		t.Action = ACTION_SELECTION
+		t.Value = selection
+	}
+
+	return t, nil
+}
+
+func (t *TodoCommand) Run() error {
+	switch t.Action {
 	case ACTION_CREATE:
-		return CreateTodo(actionValue)
+		return CreateTodo(t.Value)
 	case ACTION_DO_ID:
-		intActionValue, err := strconv.Atoi(actionValue)
+		intActionValue, err := strconv.Atoi(t.Value)
 
 		if err != nil {
 			return err
@@ -77,7 +124,7 @@ func ManageSelection(selection string) error {
 
 		return MarkTodoDone(intActionValue)
 	case ACTION_UNDO_ID:
-		intActionValue, err := strconv.Atoi(actionValue)
+		intActionValue, err := strconv.Atoi(t.Value)
 
 		if err != nil {
 			return err
@@ -85,19 +132,19 @@ func ManageSelection(selection string) error {
 
 		return MarkTodoNotDone(intActionValue)
 	case ACTION_CLEAR:
-		if len(actionValue) == 0 {
+		if len(t.Value) == 0 {
 			return fmt.Errorf("Need to specify an action value for clear action")
 		}
 
-		if actionValue == "done" {
+		if t.Value == "done" {
 			return ClearAllDone()
 		}
 
-		if actionValue == "all" {
+		if t.Value == "all" {
 			return ClearAll()
 		}
 
-		intActionValue, err := strconv.Atoi(actionValue)
+		intActionValue, err := strconv.Atoi(t.Value)
 
 		if err != nil {
 			return err
@@ -105,10 +152,12 @@ func ManageSelection(selection string) error {
 
 		return ClearTodo(intActionValue)
 	case ACTION_EDIT:
-		return EditTodo(actionValue)
-	default:
-		return MarkTodoDoneFromSelection(selection)
+		return EditTodo(t.Value)
+	case ACTION_SELECTION:
+		return MarkTodoDoneFromSelection(t.Value)
 	}
+
+	return fmt.Errorf("Action %v not found", t.Action)
 }
 
 func CheckDbAndConnect() error {
