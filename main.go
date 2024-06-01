@@ -197,13 +197,13 @@ func CheckDbAndConnect() error {
 		return err
 	}
 
-	_, err = DB.Exec("CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL UNIQUE, done BOOLEAN default false, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, finished_at TIMESTAMP)")
+	_, err = DB.Exec("CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL UNIQUE, done BOOLEAN default false, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, finished_at TIMESTAMP, alarm_time TIMESTAMP, alarm_text TEXT, priority INT)")
 
 	if err != nil {
 		return err
 	}
 
-	_, err = DB.Exec("CREATE TABLE IF NOT EXISTS todos_eliminados (deleted_at TIMESTAMP not null, id INTEGER PRIMARY KEY, title TEXT NOT NULL, done BOOLEAN default false, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, finished_at TIMESTAMP)")
+	_, err = DB.Exec("CREATE TABLE IF NOT EXISTS todos_eliminados (deleted_at TIMESTAMP not null, id INTEGER PRIMARY KEY, title TEXT NOT NULL, done BOOLEAN default false, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, finished_at TIMESTAMP, alarm_time TIMESTAMP, alarm_text TEXT, priority INT)")
 	return err
 }
 
@@ -213,11 +213,22 @@ type Todo struct {
 	Done       bool       `db:"done"`
 	CreatedAt  time.Time  `db:"created_at"`
 	FinishedAt *time.Time `db:"finished_at"`
+	AlarmTime  *time.Time `db:"alarm_time"`
+	AlarmText  *string    `db:"alarm_text"`
+	Priority   int        `db:"priority"`
+}
+
+func NewTodo(title string) *Todo {
+	return &Todo{
+		Priority: 0,
+		Done:     false,
+		Title:    title,
+	}
 }
 
 func GetTodos() ([]Todo, error) {
 	todos := []Todo{}
-	err := DB.Select(&todos, "SELECT * FROM todos ORDER BY done ASC, created_at ASC")
+	err := DB.Select(&todos, "SELECT * FROM todos ORDER BY done ASC, priority DESC, created_at ASC")
 
 	if err != nil {
 		return nil, err
@@ -227,8 +238,113 @@ func GetTodos() ([]Todo, error) {
 }
 
 func CreateTodo(title string) error {
-	_, err := DB.Exec("INSERT INTO todos (title) VALUES (?)", title)
+	todo := NewTodo(title)
+
+	// Parse text and create an alarm
+	err := todo.extractTags()
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Extracted: %v\n", todo)
+
+	_, err = DB.Exec("INSERT INTO todos (title, alarm_time, alarm_text, priority) VALUES (?, ?, ?, ?)", todo.Title, todo.AlarmTime, todo.AlarmText, todo.Priority)
 	return err
+}
+
+func (todo *Todo) extractTags() error {
+	err := todo.ExtractPriority()
+
+	if err != nil {
+		return err
+	}
+
+	err = todo.extractAlarm()
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (todo *Todo) ExtractPriority() error {
+	value, err := todo.ExtractTag("p")
+
+	if err != nil {
+		return err
+	}
+
+	if value == "" {
+		return nil
+	}
+
+	todo.Priority, err = strconv.Atoi(value)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (todo *Todo) extractAlarm() error {
+	value, err := todo.ExtractTag("a")
+
+	if err != nil {
+		return err
+	}
+
+	if value == "" {
+		return nil
+	}
+
+	alarmData := strings.Split(value, ",")
+	alarmTime, err := time.Parse("2006-01-02 15:04", alarmData[0])
+
+	if err != nil {
+		return err
+	}
+
+	alarmText := strings.TrimSpace(alarmData[0])
+
+	todo.AlarmTime = &alarmTime
+	todo.AlarmText = &alarmText
+
+	return nil
+}
+
+func (todo *Todo) ExtractTag(tag string) (string, error) {
+	openTag := fmt.Sprintf("%s:", tag)
+	closeTag := fmt.Sprintf(":%s", tag)
+
+	openIndex := strings.Index(todo.Title, openTag)
+
+	if openIndex == -1 {
+		return "", nil
+	}
+
+	closeIndex := strings.Index(todo.Title, closeTag)
+
+	if closeIndex == -1 {
+		return "", fmt.Errorf("Tag %s not closed", tag)
+	}
+
+	tagValue := todo.Title[openIndex+2 : closeIndex]
+
+	if len(tagValue) == 0 {
+		return "", fmt.Errorf("Tag %s has no value", tag)
+	}
+
+	todo.Title = strings.TrimSpace(strings.Replace(todo.Title, openTag+tagValue+closeTag, "", 1))
+	return tagValue, nil
+}
+
+func generateAlarm(alarm string) error {
+	cmd := exec.Command("echo", alarm)
+	cmd.Run()
+	return nil
 }
 
 func MarkTodoDoneFromSelection(selection string) error {
@@ -357,7 +473,7 @@ func (t *Todo) Description() string {
 		doneText = "✔"
 	}
 
-	return fmt.Sprintf("[%v] %v %v %v", t.ID, t.CreatedAt.Format("2006-01-02 15:04"), t.Title, doneText)
+	return fmt.Sprintf("[%v] [p:%v] [%v] %v %v", t.ID, t.Priority, t.CreatedAt.Format("2006-01-02 15:04"), doneText, t.Title)
 }
 
 func ErrorNotify(err error) {
