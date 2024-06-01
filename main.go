@@ -247,8 +247,6 @@ func CreateTodo(title string) error {
 		return err
 	}
 
-	fmt.Printf("Extracted: %v\n", todo)
-
 	_, err = DB.Exec("INSERT INTO todos (title, alarm_time, alarm_text, priority) VALUES (?, ?, ?, ?)", todo.Title, todo.AlarmTime, todo.AlarmText, todo.Priority)
 	return err
 }
@@ -312,7 +310,7 @@ func (todo *Todo) ExtractAlarm() error {
 	todo.AlarmTime = &alarmTime
 	todo.AlarmText = &alarmText
 
-	return nil
+	return GenerateAlarm(alarmText, alarmTime)
 }
 
 func (todo *Todo) ExtractTag(tag string) (string, error) {
@@ -341,10 +339,11 @@ func (todo *Todo) ExtractTag(tag string) (string, error) {
 	return tagValue, nil
 }
 
-func generateAlarm(alarm string) error {
-	cmd := exec.Command("echo", alarm)
-	cmd.Run()
-	return nil
+func GenerateAlarm(alarm string, time time.Time) error {
+	cmd := exec.Command("alarma", alarm, time.Format("15:04 2006-01-02"))
+	err := cmd.Run()
+
+	return err
 }
 
 func MarkTodoDoneFromSelection(selection string) error {
