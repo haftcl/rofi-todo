@@ -305,7 +305,12 @@ func (todo *Todo) ExtractAlarm() error {
 		return err
 	}
 
-	alarmText := strings.TrimSpace(alarmData[1])
+	var alarmText string
+	if len(alarmData) == 1 {
+		alarmText = todo.Title
+	} else {
+		alarmText = strings.TrimSpace(alarmData[1])
+	}
 
 	todo.AlarmTime = &alarmTime
 	todo.AlarmText = &alarmText

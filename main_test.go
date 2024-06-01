@@ -36,19 +36,38 @@ func TestCommandFromCmdArgs(t *testing.T) {
 	}
 }
 
-func TestParseTags(t *testing.T) {
-	todo := NewTodo("a:2024-06-01 13:53,Test:a p:1:p Prueba")
+func TestExtractAlarmNoText(t *testing.T) {
+	todo := NewTodo("a:2024-06-01 13:53:a Prueba")
 	todoText := "Prueba"
 	alarmTime, _ := time.Parse("2006-01-02 15:04", "2024-06-01 13:53")
-	alarmText := "Test"
-	err := todo.ExtractTags()
+	err := todo.ExtractAlarm()
 
 	if err != nil {
 		t.Errorf("Error: %v", err)
 	}
 
-	if todo.Priority != 1 {
-		t.Errorf("Priority: %d != 1", todo.Priority)
+	if todo.AlarmTime.Compare(alarmTime) != 0 {
+		t.Errorf("AlarmTime: %v != %v", todo.AlarmTime, alarmTime)
+	}
+
+	if todo.AlarmText == nil || *todo.AlarmText != todoText {
+		t.Errorf("AlarmText: %v != %s.", *todo.AlarmText, todoText)
+	}
+
+	if todo.Title != todoText {
+		t.Errorf("Text: %s != %s", todo.Title, todoText)
+	}
+}
+
+func TestExtractAlarmWithText(t *testing.T) {
+	todo := NewTodo("a:2024-06-01 13:53,Test:a Prueba")
+	todoText := "Prueba"
+	alarmTime, _ := time.Parse("2006-01-02 15:04", "2024-06-01 13:53")
+	alarmText := "Test"
+	err := todo.ExtractAlarm()
+
+	if err != nil {
+		t.Errorf("Error: %v", err)
 	}
 
 	if todo.AlarmTime.Compare(alarmTime) != 0 {
@@ -56,7 +75,25 @@ func TestParseTags(t *testing.T) {
 	}
 
 	if todo.AlarmText == nil || *todo.AlarmText != alarmText {
-		t.Errorf("AlarmText: %v != %s. todo: %+v", *todo.AlarmText, alarmText, todo)
+		t.Errorf("AlarmText: %v != %s.", *todo.AlarmText, alarmText)
+	}
+
+	if todo.Title != todoText {
+		t.Errorf("Text: %s != %s", todo.Title, todoText)
+	}
+}
+
+func TestExtractPriority(t *testing.T) {
+	todo := NewTodo("p:1:p Prueba")
+	todoText := "Prueba"
+	err := todo.ExtractPriority()
+
+	if err != nil {
+		t.Errorf("Error: %v", err)
+	}
+
+	if todo.Priority != 1 {
+		t.Errorf("Priority: %d != 1", todo.Priority)
 	}
 
 	if todo.Title != todoText {
