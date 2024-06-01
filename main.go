@@ -241,7 +241,7 @@ func CreateTodo(title string) error {
 	todo := NewTodo(title)
 
 	// Parse text and create an alarm
-	err := todo.extractTags()
+	err := todo.ExtractTags()
 
 	if err != nil {
 		return err
@@ -253,14 +253,14 @@ func CreateTodo(title string) error {
 	return err
 }
 
-func (todo *Todo) extractTags() error {
+func (todo *Todo) ExtractTags() error {
 	err := todo.ExtractPriority()
 
 	if err != nil {
 		return err
 	}
 
-	err = todo.extractAlarm()
+	err = todo.ExtractAlarm()
 
 	if err != nil {
 		return err
@@ -289,7 +289,7 @@ func (todo *Todo) ExtractPriority() error {
 	return nil
 }
 
-func (todo *Todo) extractAlarm() error {
+func (todo *Todo) ExtractAlarm() error {
 	value, err := todo.ExtractTag("a")
 
 	if err != nil {
@@ -307,7 +307,7 @@ func (todo *Todo) extractAlarm() error {
 		return err
 	}
 
-	alarmText := strings.TrimSpace(alarmData[0])
+	alarmText := strings.TrimSpace(alarmData[1])
 
 	todo.AlarmTime = &alarmTime
 	todo.AlarmText = &alarmText
