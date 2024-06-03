@@ -398,7 +398,10 @@ func EditTodo(selection string) error {
 		return fmt.Errorf("No value found in selection")
 	}
 
-	_, err = DB.Exec("UPDATE todos SET title = ? WHERE id = ?", val, id)
+	todo := NewTodo(val)
+	todo.ExtractTags()
+
+	_, err = DB.Exec("UPDATE todos SET title = ?, priority = ? WHERE id = ?", todo.Title, todo.Priority, id)
 	return err
 }
 
