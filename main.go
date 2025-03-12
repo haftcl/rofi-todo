@@ -24,6 +24,8 @@ const ACTION_CLEAR = "-"
 const ACTION_EDIT = ">"
 const ACTION_SELECTION = "SELECTION"
 const DATA_FOLDER = `/.config/rofi-todo`
+const PRIORITY_TAG = "p"
+const ALARM_TAG = "a"
 
 var actions = []string{
 	ACTION_CREATE,
@@ -154,7 +156,7 @@ func (t *TodoCommand) Run() error {
 	case ACTION_EDIT:
 		return EditTodo(t.Value)
 	case ACTION_SELECTION:
-		return MarkTodoDoneFromSelection(t.Value)
+		return CopySelection(t.Value)
 	}
 
 	return fmt.Errorf("Action %v not found", t.Action)
@@ -226,6 +228,17 @@ func NewTodo(title string) *Todo {
 	}
 }
 
+func GetTodoById(id int) (*Todo, error) {
+	todo := &Todo{}
+	err := DB.Get(todo, "SELECT * FROM todos WHERE id = ?", id)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return todo, nil
+}
+
 func GetTodos() ([]Todo, error) {
 	todos := []Todo{}
 	err := DB.Select(&todos, "SELECT * FROM todos ORDER BY done ASC, priority DESC, created_at ASC")
@@ -268,7 +281,7 @@ func (todo *Todo) ExtractTags() error {
 }
 
 func (todo *Todo) ExtractPriority() error {
-	value, err := todo.ExtractTag("p")
+	value, err := todo.ExtractTag(PRIORITY_TAG)
 
 	if err != nil {
 		return err
@@ -288,7 +301,7 @@ func (todo *Todo) ExtractPriority() error {
 }
 
 func (todo *Todo) ExtractAlarm() error {
-	value, err := todo.ExtractTag("a")
+	value, err := todo.ExtractTag(ALARM_TAG)
 
 	if err != nil {
 		return err
@@ -351,6 +364,37 @@ func GenerateAlarm(alarm string, time time.Time) error {
 	return err
 }
 
+func CopySelection(selection string) error {
+	r, err := regexp.Compile(`\[([0-9]+)\]`)
+
+	if err != nil {
+		return err
+	}
+
+	idFindings := r.FindStringSubmatch(selection)
+
+	if len(idFindings) == 0 {
+		return fmt.Errorf("No id found in selection")
+	}
+
+	id, err := strconv.Atoi(idFindings[1])
+
+    if err != nil {
+		return fmt.Errorf("Error converting id to int")
+    }
+
+	todo, err := GetTodoById(id)
+
+	if err != nil {
+		return err
+	}
+
+	cmd := exec.Command("wl-copy", todo.BuildText())
+	err = cmd.Run()
+
+	return err
+}
+
 func MarkTodoDoneFromSelection(selection string) error {
 	r, err := regexp.Compile(`\[([0-9]+)\]`)
 
@@ -389,7 +433,7 @@ func EditTodo(selection string) error {
 	id, err := strconv.Atoi(values[0])
 
 	if err != nil {
-		return err
+		return fmt.Errorf("Error converting id to int")
 	}
 
 	val := strings.TrimSpace(values[1])
@@ -472,6 +516,15 @@ func ClearAll() error {
 
 	err = tx.Commit()
 	return err
+}
+
+func (t *Todo) BuildText() string {
+	priority := ""
+	if t.Priority > 0 {
+		priority = fmt.Sprintf("%s:%v:%s", PRIORITY_TAG, t.Priority, PRIORITY_TAG)
+	}
+
+	return fmt.Sprintf("%d %s %s", t.ID, priority, t.Title)
 }
 
 func (t *Todo) Description() string {
