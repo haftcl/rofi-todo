@@ -22,6 +22,7 @@ const ACTION_DO_ID = "!"
 const ACTION_UNDO_ID = "?"
 const ACTION_CLEAR = "-"
 const ACTION_EDIT = ">"
+const ACTION_PRIORITY = "p"
 const ACTION_SELECTION = "SELECTION"
 const DATA_FOLDER = `/.config/rofi-todo`
 const PRIORITY_TAG = "p"
@@ -33,6 +34,7 @@ var actions = []string{
 	ACTION_UNDO_ID,
 	ACTION_CLEAR,
 	ACTION_EDIT,
+	ACTION_PRIORITY,
 }
 
 func main() {
@@ -121,7 +123,7 @@ func (t *TodoCommand) Run() error {
 		intActionValue, err := strconv.Atoi(t.Value)
 
 		if err != nil {
-			return err
+			return fmt.Errorf("Error converting id to int")
 		}
 
 		return MarkTodoDone(intActionValue)
@@ -129,7 +131,7 @@ func (t *TodoCommand) Run() error {
 		intActionValue, err := strconv.Atoi(t.Value)
 
 		if err != nil {
-			return err
+			return fmt.Errorf("Error converting id to int")
 		}
 
 		return MarkTodoNotDone(intActionValue)
@@ -149,17 +151,46 @@ func (t *TodoCommand) Run() error {
 		intActionValue, err := strconv.Atoi(t.Value)
 
 		if err != nil {
-			return err
+			return fmt.Errorf("Error converting id to int")
 		}
 
 		return ClearTodo(intActionValue)
 	case ACTION_EDIT:
 		return EditTodo(t.Value)
+	case ACTION_PRIORITY:
+		return EditPriority(t.Value)
 	case ACTION_SELECTION:
 		return CopySelection(t.Value)
 	}
 
 	return fmt.Errorf("Action %v not found", t.Action)
+}
+
+func EditPriority(s string) error {
+	id, val, err := IdAndValueFromSelection(s)
+
+	if err != nil {
+		return err
+	}
+
+	if val == "" {
+		return fmt.Errorf("No valid priority found")
+	}
+
+	priority, err := strconv.Atoi(val)
+
+	if err != nil {
+		return fmt.Errorf("Error converting priority to int")
+	}
+
+	todo, err := GetTodoById(id)
+
+	if err != nil {
+		return err
+	}
+
+	todo.Priority = priority
+	return UpdateTodo(todo)
 }
 
 func CheckDbAndConnect() error {
@@ -294,7 +325,7 @@ func (todo *Todo) ExtractPriority() error {
 	todo.Priority, err = strconv.Atoi(value)
 
 	if err != nil {
-		return err
+		return fmt.Errorf("Error converting priority to int")
 	}
 
 	return nil
@@ -423,30 +454,30 @@ func MarkTodoNotDone(id int) error {
 	return err
 }
 
+func UpdateTodo(todo *Todo) error {
+	_, err := DB.Exec("UPDATE todos SET title = ?, priority = ? WHERE id = ?", todo.Title, todo.Priority, todo.ID)
+	return err
+}
+
 func EditTodo(selection string) error {
-	values := strings.SplitN(selection, " ", 2)
+	id, val, err := IdAndValueFromSelection(selection)
 
-	if len(values) < 2 {
-		return fmt.Errorf("No id found in selection")
-	}
-
-	id, err := strconv.Atoi(values[0])
-
-	if err != nil {
-		return fmt.Errorf("Error converting id to int")
-	}
-
-	val := strings.TrimSpace(values[1])
+	val = strings.TrimSpace(val)
 
 	if len(val) == 0 {
 		return fmt.Errorf("No value found in selection")
 	}
 
-	todo := NewTodo(val)
+	todo, err := GetTodoById(id)
+
+	if err != nil {
+		return fmt.Errorf("Error retrieving todo, error: %v" , err)
+	}
+
+	todo.Title = val
 	todo.ExtractTags()
 
-	_, err = DB.Exec("UPDATE todos SET title = ?, priority = ? WHERE id = ?", todo.Title, todo.Priority, id)
-	return err
+	return UpdateTodo(todo)
 }
 
 func ClearTodo(id int) error {
@@ -539,4 +570,25 @@ func (t *Todo) Description() string {
 func ErrorNotify(err error) {
 	cmd := exec.Command("notify-send", "-a", "rofi-todo", "Error", err.Error())
 	cmd.Run()
+}
+
+func IdAndValueFromSelection(selection string) (int, string, error) {
+	values := strings.SplitN(selection, " ", 2)
+
+	if len(values) < 1 {
+		return 0, "", fmt.Errorf("No id found in selection")
+	}
+
+	id, err := strconv.Atoi(values[0])
+
+	if err != nil {
+		return 0, "", fmt.Errorf("Error converting id to int")
+	}
+
+	value := ""
+	if len(values) > 1 {
+		value = values[1]
+	}
+
+	return id, value, nil
 }

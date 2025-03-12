@@ -6,12 +6,13 @@ import (
 )
 
 var tests = map[string][]any{
-	"+":         {[]string{"", "+Create"}, "Create"},
-	"!":         {[]string{"", "!1"}, "1"},
-	"?":         {[]string{"", "?1"}, "1"},
-	"-":         {[]string{"", "-1"}, "1"},
-	">":         {[]string{"", ">1 test"}, "1 test"},
-	"SELECTION": {[]string{"", "test"}, "test"},
+	ACTION_CREATE:   {[]string{"", "+Create"}, "Create"},
+	ACTION_DO_ID:    {[]string{"", "!1"}, "1"},
+	ACTION_UNDO_ID:  {[]string{"", "?1"}, "1"},
+	ACTION_CLEAR:    {[]string{"", "-1"}, "1"},
+	ACTION_EDIT:     {[]string{"", ">1 test"}, "1 test"},
+	ACTION_PRIORITY: {[]string{"", "p1 test"}, "1 test"},
+	ACTION_SELECTION:     {[]string{"", "test"}, "test"},
 }
 
 func TestCommandFromCmdArgs(t *testing.T) {
